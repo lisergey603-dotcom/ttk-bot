@@ -1,0 +1,16 @@
+[Unit]
+Description=TTK sales Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ttkbot
+WorkingDirectory=/opt/ttk_bot
+ExecStart=/opt/ttk_bot/.venv/bin/python main.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

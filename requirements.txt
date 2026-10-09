@@ -1,0 +1,5 @@
+aiogram==3.31.0
+aiosqlite==0.22.1
+python-dotenv==1.2.3
+# Нужен только если в .env задан REDIS_URL
+redis==8.1.0
