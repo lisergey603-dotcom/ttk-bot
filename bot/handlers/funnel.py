@@ -4,20 +4,17 @@ import logging
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, FSInputFile, Message
+from aiogram.types import CallbackQuery, Message
 
 from bot import texts as t
 from bot.config import Config
 from bot.database import Database
 from bot.keyboards import inline
+from bot.utils.media import send_cached
 from bot.utils.render import render
 
 logger = logging.getLogger(__name__)
 router = Router(name="funnel")
-
-# Кэш file_id, чтобы не загружать PDF/картинку в Telegram каждый раз
-_file_ids: dict[str, str] = {}
-
 
 # ---------- квиз ----------
 @router.callback_query(F.data == "nav:quiz")
@@ -90,17 +87,6 @@ async def msg_price(message: Message, db: Database, state: FSMContext):
 
 
 # ---------- пример ТТК и кейсы ----------
-async def _send_file(bot: Bot, chat_id: int, path, kind: str, **kwargs):
-    """Шлёт фото/документ, используя кэш file_id."""
-    key = str(path)
-    media = _file_ids.get(key) or FSInputFile(path)
-    send = bot.send_photo if kind == "photo" else bot.send_document
-    msg = await send(chat_id, media, **kwargs)
-    obj = msg.photo[-1] if kind == "photo" else msg.document
-    _file_ids[key] = obj.file_id
-    return msg
-
-
 @router.callback_query(F.data == "nav:example")
 async def cb_example(callback: CallbackQuery, bot: Bot, config: Config):
     await callback.answer()
@@ -109,10 +95,10 @@ async def cb_example(callback: CallbackQuery, bot: Bot, config: Config):
     pdf = config.assets_dir / "example_ttk.pdf"
     try:
         if preview.exists():
-            await _send_file(bot, chat_id, preview, "photo", caption=t.EXAMPLE_CAPTION)
+            await send_cached(bot, chat_id, preview, "photo", caption=t.EXAMPLE_CAPTION)
         if pdf.exists():
             caption = t.EXAMPLE_FILE_CAPTION if preview.exists() else t.EXAMPLE_CAPTION
-            await _send_file(bot, chat_id, pdf, "document", caption=caption,
+            await send_cached(bot, chat_id, pdf, "document", caption=caption,
                              reply_markup=inline.cta(show_example=False))
             return
     except Exception as e:
