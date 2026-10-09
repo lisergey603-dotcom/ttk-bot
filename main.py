@@ -6,6 +6,8 @@ from logging.handlers import RotatingFileHandler
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -43,6 +45,18 @@ def make_storage(config: Config) -> BaseStorage:
     return MemoryStorage()
 
 
+def make_session(config: Config) -> AiohttpSession:
+    """Соединение с Telegram. Если api.telegram.org недоступен с сервера —
+    можно указать прокси (TELEGRAM_PROXY) или зеркало Bot API (TELEGRAM_API_URL)."""
+    session = AiohttpSession(proxy=config.telegram_proxy) if config.telegram_proxy else AiohttpSession()
+    if config.telegram_proxy:
+        logging.info("Telegram: через прокси %s", config.telegram_proxy.split("@")[-1])
+    if config.telegram_api_url:
+        session.api = TelegramAPIServer.from_base(config.telegram_api_url)
+        logging.info("Telegram: через сервер %s", config.telegram_api_url)
+    return session
+
+
 async def main() -> None:
     config = load_config()
     setup_logging(config.log_level)
@@ -50,7 +64,8 @@ async def main() -> None:
     db = Database(config.db_path)
     await db.connect()
 
-    bot = Bot(config.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot = Bot(config.bot_token, session=make_session(config),
+              default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     bot.session.middleware(OutgoingLogMiddleware(db))
 
     dp = Dispatcher(storage=make_storage(config))
@@ -68,6 +83,7 @@ async def main() -> None:
 
     dp.include_routers(*get_routers())
 
+    logging.info("Подключаюсь к Telegram...")
     await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in t.BOT_COMMANDS.items()])
     me = await bot.get_me()
     logging.info("Бот @%s запущен. Ссылка для лендинга: https://t.me/%s?start=ttk_landing", me.username, me.username)

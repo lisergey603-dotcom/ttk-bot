@@ -60,16 +60,27 @@ systemctl enable -q ttk-bot
 STARTED_AT="$(date '+%Y-%m-%d %H:%M:%S')"
 systemctl restart ttk-bot
 
-say "Проверяю запуск"
-sleep 8
-LOG="$(journalctl -u ttk-bot --since "$STARTED_AT" --no-pager)"
-if systemctl is-active -q ttk-bot && grep -q "запущен" <<<"$LOG"; then
+say "Проверяю запуск (до 60 секунд)"
+OK=0
+for _ in $(seq 1 30); do
+  sleep 2
+  LOG="$(journalctl -u ttk-bot --since "$STARTED_AT" --no-pager)"
+  if grep -q "запущен" <<<"$LOG"; then OK=1; break; fi
+done
+if [ "$OK" = 1 ] && systemctl is-active -q ttk-bot; then
   grep "запущен" <<<"$LOG" | tail -1
   echo -e "\n\033[1;32m✅ Бот работает. Напишите ему /start в Telegram.\033[0m"
   echo "Логи:        journalctl -u ttk-bot -f"
   echo "Перезапуск:  systemctl restart ttk-bot"
   echo "Обновление:  cd $APP_DIR && git pull && bash deploy/install.sh"
 else
-  tail -30 <<<"$LOG"
-  die "Бот не запустился — пришлите последние строки выше."
+  tail -15 <<<"$LOG"
+  say "Проверяю связь сервера с Telegram"
+  if curl -sS -m 10 -o /dev/null https://api.telegram.org 2>/dev/null; then
+    echo "api.telegram.org доступен — проблема в настройках (проверьте BOT_TOKEN в .env)."
+  else
+    echo -e "\033[1;33mСервер НЕ достаёт до api.telegram.org — Telegram API блокируется на стороне провайдера.\033[0m"
+    echo "Нужен прокси (TELEGRAM_PROXY в .env) или сервер за пределами РФ."
+  fi
+  die "Бот не запустился — пришлите скриншот этого экрана."
 fi

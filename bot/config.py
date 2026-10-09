@@ -22,6 +22,8 @@ class Config:
     db_path: Path
     redis_url: str | None
     log_level: str
+    telegram_proxy: str | None = None    # socks5://user:pass@host:port или http://host:port
+    telegram_api_url: str | None = None  # своё зеркало Bot API вместо api.telegram.org
     antiflood_limit: int = 5            # сообщений
     antiflood_period: float = 10.0      # за N секунд
     callback_limit: int = 12            # нажатий кнопок за тот же период
@@ -51,6 +53,8 @@ def load_config() -> Config:
         db_path=db_path,
         redis_url=os.getenv("REDIS_URL", "").strip() or None,
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        telegram_proxy=os.getenv("TELEGRAM_PROXY", "").strip() or None,
+        telegram_api_url=os.getenv("TELEGRAM_API_URL", "").strip().rstrip("/") or None,
         antiflood_limit=int(os.getenv("ANTIFLOOD_LIMIT", 5)),
         antiflood_period=float(os.getenv("ANTIFLOOD_PERIOD", 10)),
         callback_limit=int(os.getenv("CALLBACK_LIMIT", 12)),
