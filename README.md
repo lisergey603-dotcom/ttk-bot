@@ -31,7 +31,8 @@ ttk_bot/
 ├── .env.example
 ├── Dockerfile
 ├── docker-compose.yml         # бот + Redis
-├── deploy/ttk-bot.service     # unit для systemd
+├── deploy/install.sh          # установка на сервер одной командой
+├── deploy/ttk-bot.service     # пример unit для systemd
 ├── tools/make_example_ttk.py  # генератор фирменного образца ТТК
 └── bot/
     ├── config.py              # чтение .env
@@ -104,35 +105,44 @@ python main.py
 
 ## Деплой на VPS
 
-### Вариант 1: Docker (рекомендуется)
+### Вариант 1: скрипт установки (рекомендуется, 1 ГБ RAM достаточно)
+
+На чистом сервере Ubuntu 22.04/24.04, под root:
 
 ```bash
-# на сервере (Ubuntu 22.04+)
-sudo apt update && sudo apt install -y docker.io docker-compose-v2
-git clone <ваш-репозиторий> ttk_bot && cd ttk_bot   # или загрузите архив через scp
+apt update && apt install -y git
+git clone https://github.com/lisergey603-dotcom/ttk-bot && cd ttk-bot
+cat > .env <<'END'
+BOT_TOKEN=токен_от_BotFather
+ADMIN_ID=ваш_id_из_userinfobot
+MANAGER_CHAT_ID=
+END
+bash deploy/install.sh
+```
+
+Скрипт поставит Python и зависимости, создаст службу `ttk-bot` (автозапуск после перезагрузки,
+перезапуск при падении) и проверит, что бот поднялся.
+
+- логи: `journalctl -u ttk-bot -f`
+- перезапуск: `systemctl restart ttk-bot`
+- обновление: `cd ~/ttk-bot && git pull && bash deploy/install.sh`
+
+Репозиторий приватный: при `git clone` логин — ваш ник GitHub, пароль — Personal Access Token
+(github.com/settings/tokens → Generate new token (classic) → галочка `repo`).
+
+### Вариант 2: Docker
+
+```bash
+apt update && apt install -y docker.io docker-compose-v2 git
+git clone https://github.com/lisergey603-dotcom/ttk-bot && cd ttk-bot
 cp .env.example .env && nano .env
 docker compose up -d --build
-docker compose logs -f bot          # смотреть логи
+docker compose logs -f bot
 ```
 
-Обновление: `git pull && docker compose up -d --build`. База и логи лежат в `./data` и `./logs` на хосте.
+Обновление: `git pull && docker compose up -d --build`. База и логи лежат в `./data` и `./logs`.
 
-### Вариант 2: systemd
-
-```bash
-sudo apt update && sudo apt install -y python3 python3-venv
-sudo useradd -r -m -d /opt/ttk_bot ttkbot
-sudo cp -r ttk_bot/. /opt/ttk_bot/ && sudo chown -R ttkbot:ttkbot /opt/ttk_bot
-sudo -u ttkbot bash -c "cd /opt/ttk_bot && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
-sudo -u ttkbot cp /opt/ttk_bot/.env.example /opt/ttk_bot/.env && sudo -u ttkbot nano /opt/ttk_bot/.env
-
-sudo cp /opt/ttk_bot/deploy/ttk-bot.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now ttk-bot
-journalctl -u ttk-bot -f            # логи
-```
-
-Бэкап базы: `cp /opt/ttk_bot/data/bot.db ~/backup_$(date +%F).db` (можно повесить на cron).
+Бэкап базы: `cp data/bot.db ~/backup_$(date +%F).db` (можно повесить на cron).
 
 ## Как пользоваться
 
