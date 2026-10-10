@@ -26,6 +26,7 @@ def cancel_only() -> ReplyKeyboardMarkup:
 def contact_request() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text=t.BTN_CONTACT_TG)],
             [KeyboardButton(text=t.BTN_SEND_PHONE, request_contact=True)],
             [KeyboardButton(text=t.BTN_CANCEL)],
         ],

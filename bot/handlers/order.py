@@ -113,6 +113,13 @@ async def step_contact_shared(message: Message, state: FSMContext):
     await _ask_comment(message, state, phone)
 
 
+@router.message(OrderForm.contact, F.text == t.BTN_CONTACT_TG)
+async def step_contact_telegram(message: Message, state: FSMContext):
+    user = message.from_user
+    contact = f"Telegram @{user.username}" if user.username else "Telegram (ответить реплаем в боте)"
+    await _ask_comment(message, state, contact)
+
+
 @router.message(OrderForm.contact, STEP_TEXT)
 async def step_contact_text(message: Message, state: FSMContext):
     contact = normalize_contact(message.text)
