@@ -92,14 +92,18 @@ async def cb_example(callback: CallbackQuery, bot: Bot, config: Config):
     await callback.answer()
     chat_id = callback.message.chat.id
     preview = config.assets_dir / "example_ttk_preview.png"
-    pdf = config.assets_dir / "example_ttk.pdf"
+    pdfs = [(config.assets_dir / name, caption) for name, caption in t.EXAMPLE_FILES
+            if (config.assets_dir / name).exists()]
     try:
         if preview.exists():
             await send_cached(bot, chat_id, preview, "photo", caption=t.EXAMPLE_CAPTION)
-        if pdf.exists():
-            caption = t.EXAMPLE_FILE_CAPTION if preview.exists() else t.EXAMPLE_CAPTION
+        for i, (pdf, caption) in enumerate(pdfs):
+            last = i == len(pdfs) - 1
+            if i == 0 and not preview.exists():
+                caption = t.EXAMPLE_CAPTION + "\n\n" + caption
             await send_cached(bot, chat_id, pdf, "document", caption=caption,
-                             reply_markup=inline.cta(show_example=False))
+                             reply_markup=inline.cta(show_example=False) if last else None)
+        if pdfs:
             return
     except Exception as e:
         logger.exception("Не удалось отправить пример ТТК: %s", e)
