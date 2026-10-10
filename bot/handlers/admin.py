@@ -14,9 +14,10 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 from bot import texts as t
 from bot.database import Database
 from bot.keyboards import inline
-from bot.states import Broadcast
+from bot.states import Broadcast, OrderEdit
 from bot.utils.filters import IsAdmin
-from bot.utils.helpers import orders_to_csv
+from bot.utils.helpers import (fmt_deadline, fmt_rub, money_summary, order_card, orders_to_csv,
+                               parse_amount, parse_deadline)
 from bot.utils.render import render
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,8 @@ async def admin_orders(event: Message | CallbackQuery, db: Database):
 
     text = t.ADM_ORDERS_HEADER.format(page=page, pages=pages, total=total)
     for o in rows:
+        deadline = (t.ADM_ORDER_ROW_DEADLINE.format(deadline=fmt_deadline(o["deadline"], o["status"]))
+                    if o.get("deadline") else "")
         text += t.ADM_ORDER_ROW.format(
             id=o["id"],
             status=t.ORDER_STATUSES.get(o["status"], o["status"]),
@@ -56,10 +59,84 @@ async def admin_orders(event: Message | CallbackQuery, db: Database):
             name=escape(o["name"]),
             venue=escape(o["venue"]),
             positions=escape(o["positions"]),
-            contact=escape(o["contact"]),
-            package=t.PACKAGES.get(o["package"] or "", {}).get("title", t.NO_PACKAGE),
+            amount=fmt_rub(o.get("amount")),
+            deadline=deadline,
         ) + "\n"
-    await render(event, text, inline.admin_pages(page, pages))
+    text += t.ADM_ORDERS_HINT
+    await render(event, text, inline.admin_pages(page, pages, [o["id"] for o in rows]))
+
+
+# ---------- карточка заявки ----------
+async def show_card(event: Message | CallbackQuery, db: Database, order_id: int, edit: bool = True):
+    o = await db.get_order(order_id)
+    if not o:
+        return await render(event, t.ADM_CARD_NOT_FOUND, inline.admin_back())
+    await render(event, order_card(o), inline.order_card(order_id, o["status"]), edit=edit)
+
+
+@router.callback_query(F.data.startswith("oc:"))
+async def card_open(callback: CallbackQuery, state: FSMContext, db: Database):
+    await state.clear()
+    # из уведомления о новой заявке (🔥) — новым сообщением, чтобы уведомление осталось
+    text = (callback.message.text or "") if callback.message else ""
+    await show_card(callback, db, int(callback.data.split(":")[1]), edit=not text.startswith("🔥"))
+
+
+@router.callback_query(F.data.startswith("os:"))
+async def card_status(callback: CallbackQuery, db: Database):
+    _, order_id, status = callback.data.split(":")
+    order_id = int(order_id)
+    o = await db.get_order(order_id)
+    if status not in t.ORDER_STATUSES or not o:
+        return await callback.answer(t.UNKNOWN_CALLBACK)
+    await db.set_order_status(order_id, status)
+    if status in ("prepaid", "done") and not o.get("amount"):
+        await callback.answer(t.STATUS_NEEDS_AMOUNT, show_alert=True)
+    await show_card(callback, db, order_id)
+
+
+@router.callback_query(F.data.startswith("oe:"))
+async def card_edit(callback: CallbackQuery, state: FSMContext):
+    _, order_id, field = callback.data.split(":")
+    if field not in t.ADM_EDIT_PROMPTS:
+        return await callback.answer(t.UNKNOWN_CALLBACK)
+    await state.set_state(OrderEdit.value)
+    await state.update_data(order_id=int(order_id), field=field)
+    await render(callback, t.ADM_EDIT_PROMPTS[field].format(id=order_id), edit=False)
+
+
+@router.message(OrderEdit.value, Command("cancel"))
+async def card_edit_cancel(message: Message, state: FSMContext, db: Database):
+    data = await state.get_data()
+    await state.clear()
+    await message.answer(t.ADM_CANCELLED)
+    if data.get("order_id"):
+        await show_card(message, db, data["order_id"])
+
+
+@router.message(OrderEdit.value, F.text)
+async def card_edit_value(message: Message, state: FSMContext, db: Database):
+    data = await state.get_data()
+    field, order_id, raw = data["field"], data["order_id"], message.text.strip()
+    if field == "amount":
+        value = parse_amount(raw)
+    elif raw == "-":
+        value = None
+    elif field == "deadline":
+        value = parse_deadline(raw)
+    else:
+        value = raw[:1000] or None
+    if value is None and (field == "amount" or raw != "-"):
+        return await message.answer(t.ADM_EDIT_ERRORS[field])
+    await db.set_order_field(order_id, field, value)
+    await state.clear()
+    await message.answer(t.ADM_EDIT_SAVED)
+    await show_card(message, db, order_id)
+
+
+@router.message(OrderEdit.value)
+async def card_edit_not_text(message: Message, state: FSMContext):
+    await message.answer(t.ADM_EDIT_ERRORS[(await state.get_data()).get("field", "note")])
 
 
 # ---------- статистика ----------
@@ -82,6 +159,7 @@ async def admin_stats(event: Message | CallbackQuery, db: Database):
         price_cr=_pct(s["price"], s["started"]),
         order_cr=_pct(s["ordered_users"], s["started"]),
         sources=sources,
+        money=money_summary(await db.get_status_totals()),
     )
     await render(event, text, inline.admin_back())
 

@@ -1,6 +1,7 @@
 """Inline-клавиатуры. callback_data — короткие строки с префиксами:
 nav:* — навигация, q:* — квиз, faq:* — вопросы, pkg:* — выбор пакета,
-ord:* — шаги заявки, st:* — статус заявки (для менеджера), adm:* / bc:* — админка.
+ord:* — шаги заявки, st:* — статус заявки (для менеджера), adm:* / bc:* — админка,
+oc:* / os:* / oe:* — карточка заявки: открыть / сменить статус / изменить поле.
 """
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -113,7 +114,23 @@ def order_status(order_id: int) -> InlineKeyboardMarkup:
     for key, label in t.ORDER_STATUSES.items():
         if key != "new":
             kb.button(text=label, callback_data=f"st:{order_id}:{key}")
-    kb.adjust(3)
+    kb.button(text=t.ADM_BTN_CARD, callback_data=f"oc:{order_id}")
+    kb.adjust(2, 2, 1)
+    return kb.as_markup()
+
+
+def order_card(order_id: int, status: str) -> InlineKeyboardMarkup:
+    """Кнопки карточки заявки в админке."""
+    kb = InlineKeyboardBuilder()
+    for key, label in t.ORDER_STATUSES.items():
+        if key not in ("new", status):
+            kb.button(text=label, callback_data=f"os:{order_id}:{key}")
+    kb.button(text=t.ADM_BTN_AMOUNT, callback_data=f"oe:{order_id}:amount")
+    kb.button(text=t.ADM_BTN_DEADLINE, callback_data=f"oe:{order_id}:deadline")
+    kb.button(text=t.ADM_BTN_NOTE, callback_data=f"oe:{order_id}:note")
+    kb.button(text=t.ADM_BTN_TO_ORDERS, callback_data="adm:orders:1")
+    statuses = len(t.ORDER_STATUSES) - (1 if status == "new" else 2)
+    kb.adjust(*([2] * (statuses // 2) + ([1] if statuses % 2 else [])), 3, 1)
     return kb.as_markup()
 
 
@@ -128,15 +145,22 @@ def admin_menu() -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def admin_pages(page: int, pages: int) -> InlineKeyboardMarkup:
+def admin_pages(page: int, pages: int, order_ids: list[int] | None = None) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+    order_ids = order_ids or []
+    for oid in order_ids:
+        kb.button(text=f"№{oid}", callback_data=f"oc:{oid}")
+    nav = 0
     if page > 1:
         kb.button(text="⬅️", callback_data=f"adm:orders:{page - 1}")
+        nav += 1
     if page < pages:
         kb.button(text="➡️", callback_data=f"adm:orders:{page + 1}")
+        nav += 1
     kb.button(text=t.ADM_BTN_EXPORT, callback_data="adm:export")
     kb.button(text=t.BTN_BACK, callback_data="adm:menu")
-    kb.adjust(2, 2)
+    sizes = ([len(order_ids)] if order_ids else []) + ([nav] if nav else []) + [2]
+    kb.adjust(*sizes)
     return kb.as_markup()
 
 

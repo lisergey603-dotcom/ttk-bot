@@ -396,9 +396,12 @@ MANAGER_REPLY_FAILED = "⚠️ Не удалось отправить: клие�
 ORDER_STATUSES = {
     "new": "🆕 Новая",
     "in_work": "🟡 В работе",
-    "done": "✅ Закрыта",
+    "prepaid": "💰 Предоплата",
+    "done": "✅ Оплачено",
     "rejected": "❌ Отказ",
 }
+# Статусы, при которых нужна сумма заказа (для учёта денег)
+STATUS_NEEDS_AMOUNT = "Укажите сумму заказа — откройте «📇 Карточка» → «💵 Сумма»."
 STATUS_CHANGED = "Статус: {status} (изменил {who})"
 
 USER_FILE_RECEIVED = "📎 Получил, передал менеджеру. Спасибо!"
@@ -425,15 +428,66 @@ ADM_BTN_BROADCAST = "📣 Рассылка"
 ADM_BTN_EXPORT = "📥 Экспорт CSV"
 ADM_NO_ORDERS = "Заявок пока нет."
 ADM_ORDERS_HEADER = "📋 <b>Заявки</b> (стр. {page}/{pages}, всего {total})\n\n"
-ADM_ORDER_ROW = "<b>№{id}</b> · {status} · {created_at}\n{name} · {venue}\n📋 {positions} · 📞 {contact} · 📦 {package}\n"
+ADM_ORDER_ROW = "<b>№{id}</b> · {status} · {created_at}\n{name} · {venue}\n📋 {positions} · 💵 {amount}{deadline}\n"
+ADM_ORDERS_HINT = "👇 Нажмите номер заявки, чтобы открыть карточку."
+ADM_ORDER_ROW_DEADLINE = " · 📅 {deadline}"
+
+# Карточка заявки (CRM)
+ADM_CARD = (
+    "📇 <b>Заявка №{id}</b> · {status}\n"
+    "🗓 {created_at} · источник: {source}\n\n"
+    "👤 {name}\n"
+    "🏠 {venue}\n"
+    "📋 Позиций: {positions}\n"
+    "📞 {contact}\n"
+    "📦 Пакет: {package}\n"
+    "💬 {comment}\n\n"
+    "💵 Сумма: <b>{amount}</b>\n"
+    "💰 Оплачено: {paid}\n"
+    "📅 Срок сдачи: {deadline}\n"
+    "📝 Заметка: {note}"
+)
+ADM_CARD_NOT_FOUND = "Заявка не найдена."
+ADM_BTN_CARD = "📇 Карточка"
+ADM_BTN_AMOUNT = "💵 Сумма"
+ADM_BTN_DEADLINE = "📅 Срок"
+ADM_BTN_NOTE = "📝 Заметка"
+ADM_BTN_TO_ORDERS = "📋 К заявкам"
+ADM_NOT_SET = "—"
+ADM_OVERDUE = " ⚠️ просрочен"
+ADM_PAID_HALF = "{paid} (предоплата 50%)"
+ADM_PAID_FULL = "{paid} (полностью)"
+ADM_EDIT_PROMPTS = {
+    "amount": "💵 Заявка №{id}: напишите сумму заказа в рублях, например <code>19900</code>.\n\n/cancel — отмена",
+    "deadline": "📅 Заявка №{id}: напишите дату сдачи, например <code>17.10</code> или <code>17.10.2026</code>.\n"
+                "Чтобы убрать срок — отправьте «-».\n\n/cancel — отмена",
+    "note": "📝 Заявка №{id}: напишите заметку (что прислал клиент, договорённости).\n"
+            "Чтобы удалить — отправьте «-».\n\n/cancel — отмена",
+}
+ADM_EDIT_ERRORS = {
+    "amount": "Не понял сумму 🤔 Напишите только число, например <code>19900</code>. /cancel — отмена",
+    "deadline": "Не понял дату 🤔 Пример: <code>17.10</code> или <code>17.10.2026</code>. /cancel — отмена",
+    "note": "Нужен текст. /cancel — отмена",
+}
+ADM_EDIT_SAVED = "✅ Сохранено."
 ADM_STATS = (
     "📊 <b>Статистика воронки</b>\n\n"
     "▶️ Нажали /start: <b>{started}</b> (за сутки: {today})\n"
     "💰 Дошли до прайса: <b>{price}</b> ({price_cr}%)\n"
     "📝 Оставили заявку: <b>{ordered_users}</b> ({order_cr}%) · всего заявок: {orders}\n"
     "🚫 Заблокировали бота: {blocked}\n\n"
-    "<b>По источникам</b> (start → прайс → заявка):\n{sources}"
+    "<b>По источникам</b> (start → прайс → заявка):\n{sources}\n\n"
+    "{money}"
 )
+ADM_MONEY = (
+    "💵 <b>Деньги</b>\n"
+    "Получено: <b>{received}</b>\n"
+    "Ещё получить: <b>{expected}</b> (вторая половина по предоплатам + заказы «в работе»)\n\n"
+    "<b>Заявки по статусам:</b>\n{statuses}"
+)
+ADM_MONEY_STATUS_ROW = "{status}: {n}{total}"
+ADM_MONEY_STATUS_TOTAL = " · {total}"
+ADM_MONEY_NO_AMOUNT = "\n⚠️ Без суммы: {n} заявок в работе/оплате — впишите сумму в карточке, иначе они не попадут в подсчёт."
 ADM_STATS_SOURCE_ROW = "• {source}: {started} → {price} → {ordered}"
 ADM_BROADCAST_ASK = (
     "📣 Пришлите сообщение для рассылки — текст, фото, видео или документ с подписью.\n"

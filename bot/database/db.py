@@ -7,6 +7,7 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
+ORDER_EXTRA_COLUMNS = {"amount": "INTEGER", "deadline": "TEXT", "note": "TEXT"}
 
 
 class Database:
@@ -21,8 +22,17 @@ class Database:
         await self.conn.execute("PRAGMA journal_mode=WAL")
         await self.conn.execute("PRAGMA foreign_keys=ON")
         await self.conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        await self._migrate()
         await self.conn.commit()
         logger.info("БД подключена: %s", self.path)
+
+    async def _migrate(self) -> None:
+        """Добавляет новые колонки в уже существующую базу (данные не трогаются)."""
+        cols = {r["name"] for r in await self._fetchall("PRAGMA table_info(orders)")}
+        for name, ddl in ORDER_EXTRA_COLUMNS.items():
+            if name not in cols:
+                await self.conn.execute(f"ALTER TABLE orders ADD COLUMN {name} {ddl}")
+                logger.info("БД: добавлена колонка orders.%s", name)
 
     async def close(self) -> None:
         if self.conn:
@@ -90,8 +100,17 @@ class Database:
     async def set_order_status(self, order_id: int, status: str) -> None:
         await self._exec("UPDATE orders SET status=? WHERE id=?", (status, order_id))
 
+    async def set_order_field(self, order_id: int, field: str, value: Any) -> None:
+        if field not in ORDER_EXTRA_COLUMNS:
+            raise ValueError(field)
+        await self._exec(f"UPDATE orders SET {field}=? WHERE id=?", (value, order_id))
+
     async def get_order(self, order_id: int) -> dict | None:
-        return await self._fetchone("SELECT * FROM orders WHERE id=?", (order_id,))
+        return await self._fetchone(
+            """SELECT o.*, u.username, u.source FROM orders o
+               LEFT JOIN users u ON u.id = o.user_id WHERE o.id=?""",
+            (order_id,),
+        )
 
     async def get_orders(self, limit: int = 10, offset: int = 0) -> list[dict]:
         return await self._fetchall(
@@ -108,10 +127,19 @@ class Database:
     async def get_all_orders(self) -> list[dict]:
         return await self._fetchall(
             """SELECT o.id, o.created_at, o.status, o.name, o.venue, o.positions, o.contact,
-                      o.comment, o.package, o.user_id, u.username, u.source, u.segment,
+                      o.comment, o.package, o.amount, o.deadline, o.note, o.user_id, u.username, u.source, u.segment,
                       u.menu_size, u.ttk_status
                FROM orders o LEFT JOIN users u ON u.id = o.user_id ORDER BY o.id"""
         )
+
+    async def get_status_totals(self) -> dict[str, dict]:
+        """По каждому статусу: количество заявок и сумма (там, где она указана)."""
+        rows = await self._fetchall(
+            """SELECT status, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS total,
+                      SUM(CASE WHEN amount IS NULL THEN 1 ELSE 0 END) AS no_amount
+               FROM orders GROUP BY status"""
+        )
+        return {r["status"]: r for r in rows}
 
     # ---------- статистика ----------
     async def get_stats(self) -> dict:

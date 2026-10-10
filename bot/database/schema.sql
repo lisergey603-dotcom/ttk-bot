@@ -25,8 +25,11 @@ CREATE TABLE IF NOT EXISTS orders (
     contact     TEXT    NOT NULL,                  -- телефон или email
     comment     TEXT,
     package     TEXT,                              -- выбранный пакет (если выбирал)
-    status      TEXT    NOT NULL DEFAULT 'new',    -- new / in_work / done / rejected
-    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    status      TEXT    NOT NULL DEFAULT 'new',    -- new / in_work / prepaid / done / rejected
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    amount      INTEGER,                           -- сумма заказа, ₽
+    deadline    TEXT,                              -- срок сдачи, YYYY-MM-DD
+    note        TEXT                               -- заметка менеджера
 );
 
 -- Лог переписки (входящие и исходящие)

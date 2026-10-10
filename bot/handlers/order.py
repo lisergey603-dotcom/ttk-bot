@@ -207,10 +207,14 @@ async def cb_status(callback: CallbackQuery, db: Database):
     if status not in t.ORDER_STATUSES or not await db.get_order(int(order_id)):
         return await callback.answer(t.UNKNOWN_CALLBACK)
     await db.set_order_status(int(order_id), status)
+    order = await db.get_order(int(order_id))
     who = escape(callback.from_user.full_name)
     base = (callback.message.html_text or "").split("\n\nСтатус:")[0]
     await callback.message.edit_text(
         base + "\n\n" + t.STATUS_CHANGED.format(status=t.ORDER_STATUSES[status], who=who),
         reply_markup=inline.order_status(int(order_id)),
     )
-    await callback.answer(t.ORDER_STATUSES[status])
+    if status in ("prepaid", "done") and not order.get("amount"):
+        await callback.answer(t.STATUS_NEEDS_AMOUNT, show_alert=True)
+    else:
+        await callback.answer(t.ORDER_STATUSES[status])

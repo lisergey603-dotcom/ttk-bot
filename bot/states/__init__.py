@@ -15,6 +15,10 @@ class AskQuestion(StatesGroup):
     waiting = State()
 
 
+class OrderEdit(StatesGroup):
+    value = State()  # ждём сумму / срок / заметку для заявки
+
+
 class Broadcast(StatesGroup):
     waiting_content = State()
     confirm = State()
