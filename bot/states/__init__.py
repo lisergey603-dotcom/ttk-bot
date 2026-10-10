@@ -3,6 +3,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class OrderForm(StatesGroup):
+    consent = State()  # согласие на обработку персональных данных
     name = State()
     venue = State()
     positions = State()

@@ -90,6 +90,17 @@ def faq_answer(ask_manager: bool = False) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
+def order_consent(show_policy: bool = True) -> InlineKeyboardMarkup:
+    """Шаг согласия на обработку персональных данных перед заявкой."""
+    kb = InlineKeyboardBuilder()
+    kb.button(text=t.BTN_CONSENT, callback_data="ord:consent")
+    if show_policy:
+        kb.button(text=t.BTN_PRIVACY, callback_data="ord:privacy")
+    kb.button(text=t.BTN_CANCEL, callback_data="ord:cancel")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
 def order_positions() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for i, label in enumerate(t.POSITIONS_OPTIONS):

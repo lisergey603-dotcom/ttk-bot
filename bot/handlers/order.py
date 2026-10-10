@@ -1,4 +1,4 @@
-"""Сбор заявки (FSM): имя → заведение/город → позиции → контакт → комментарий → подтверждение."""
+"""Сбор заявки (FSM): согласие на ПД (один раз) → имя → заведение/город → позиции → контакт → комментарий → подтверждение."""
 import re
 from html import escape
 
@@ -25,34 +25,81 @@ STEP_TEXT = F.text & ~F.text.startswith("/") & ~F.text.in_(
 
 
 # ---------- вход в сценарий ----------
-async def start_order(message: Message, state: FSMContext, package: str | None = None):
+async def start_order(message: Message, state: FSMContext, db: Database, user_id: int,
+                      package: str | None = None):
+    """user_id передаём явно: в колбэке message.from_user — это бот, а не клиент."""
     await state.clear()
-    await state.set_state(OrderForm.name)
     await state.update_data(package=package)
-    prefix = t.ORDER_START_PKG.format(package=t.PACKAGES[package]["title"]) if package else ""
+    user = await db.get_user(user_id) or {}
+    if not user.get("pd_consent_at"):  # согласия ещё не было — сначала спрашиваем его
+        await state.set_state(OrderForm.consent)
+        return await message.answer(t.ORDER_CONSENT, reply_markup=inline.order_consent())
+    await _ask_name(message, state)
+
+
+async def _ask_name(message: Message, state: FSMContext):
+    await state.set_state(OrderForm.name)
+    package = (await state.get_data()).get("package")
+    prefix = t.ORDER_START_PKG.format(package=t.PACKAGES[package]["title"]) if package in t.PACKAGES else ""
     await message.answer(prefix + t.ORDER_START, reply_markup=reply.cancel_only())
 
 
 @router.callback_query(F.data == "nav:order")
-async def cb_order(callback: CallbackQuery, state: FSMContext):
+async def cb_order(callback: CallbackQuery, state: FSMContext, db: Database):
     await callback.answer()
     package = (await state.get_data()).get("package")  # сохраняем пакет при «Заполнить заново»
-    await start_order(callback.message, state, package)
+    await start_order(callback.message, state, db, callback.from_user.id, package)
 
 
 @router.callback_query(F.data.startswith("pkg:"))
-async def cb_package(callback: CallbackQuery, state: FSMContext):
+async def cb_package(callback: CallbackQuery, state: FSMContext, db: Database):
     key = callback.data.split(":", 1)[1]
     if key not in t.PACKAGES:
         return await callback.answer(t.UNKNOWN_CALLBACK)
     await callback.answer()
-    await start_order(callback.message, state, key)
+    await start_order(callback.message, state, db, callback.from_user.id, key)
 
 
 @router.message(F.chat.type == "private", F.text == t.REPLY_ORDER)
 @router.message(F.chat.type == "private", Command("order"))
-async def msg_order(message: Message, state: FSMContext):
-    await start_order(message, state)
+async def msg_order(message: Message, state: FSMContext, db: Database):
+    await start_order(message, state, db, message.from_user.id)
+
+
+# ---------- согласие на обработку персональных данных ----------
+@router.callback_query(OrderForm.consent, F.data == "ord:consent")
+async def cb_consent(callback: CallbackQuery, state: FSMContext, db: Database):
+    await db.set_pd_consent(callback.from_user.id)
+    await callback.answer(t.ORDER_CONSENT_DONE)
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer(t.ORDER_CONSENT_DONE)
+    await _ask_name(callback.message, state)
+
+
+@router.callback_query(F.data == "ord:consent")
+async def stale_consent(callback: CallbackQuery):
+    await callback.answer(t.UNKNOWN_CALLBACK, show_alert=True)
+
+
+@router.callback_query(F.data == "ord:privacy")
+async def cb_privacy(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    on_consent_step = await state.get_state() == OrderForm.consent.state
+    await callback.message.answer(
+        t.PRIVACY_POLICY,
+        reply_markup=inline.order_consent(show_policy=False) if on_consent_step else None,
+    )
+
+
+@router.message(F.chat.type == "private", Command("privacy"))
+async def cmd_privacy(message: Message):
+    await message.answer(t.PRIVACY_POLICY)
+
+
+@router.message(OrderForm.consent, STEP_TEXT)
+@router.message(OrderForm.consent, ~F.text)
+async def step_consent_text(message: Message):
+    await message.answer(t.ORDER_CONSENT_HINT, reply_markup=inline.order_consent())
 
 
 @router.callback_query(F.data == "ord:cancel")

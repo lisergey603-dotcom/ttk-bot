@@ -83,6 +83,7 @@ def orders_to_csv(rows: list[dict]) -> bytes:
         "username": "Username", "source": "Источник", "segment": "Тип заведения",
         "menu_size": "Размер меню", "ttk_status": "Наличие ТТК",
         "amount": "Сумма, ₽", "deadline": "Срок сдачи", "note": "Заметка",
+        "pd_consent_at": "Согласие на ПД (UTC)",
     }
     writer = csv.DictWriter(buf, fieldnames=list(headers), delimiter=";", extrasaction="ignore")
     writer.writerow(headers)
@@ -182,6 +183,7 @@ def order_card(o: dict) -> str:
         paid=paid_text,
         deadline=fmt_deadline(o.get("deadline"), o.get("status")),
         note=escape(o["note"]) if o.get("note") else t.ADM_NOT_SET,
+        consent=(o.get("pd_consent_at") or "")[:16] or t.ADM_NOT_SET,
     )
 
 

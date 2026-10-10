@@ -36,6 +36,27 @@ async def admin_menu(event: Message | CallbackQuery, state: FSMContext):
     await render(event, t.ADMIN_MENU, inline.admin_menu())
 
 
+# ---------- удаление данных клиента (отзыв согласия на ПД) ----------
+@router.message(Command("forget"))
+async def admin_forget(message: Message, bot: Bot, db: Database):
+    arg = (message.text or "").split(maxsplit=1)[1:]
+    raw = arg[0].strip().lstrip("#id").strip() if arg else ""
+    if not raw.isdigit():
+        return await message.answer(t.ADM_FORGET_USAGE)
+    user_id = int(raw)
+    if not await db.get_user(user_id):
+        return await message.answer(t.ADM_FORGET_NOT_FOUND.format(user_id=user_id))
+    # Сначала уведомляем, потом удаляем — чтобы и это сообщение не осталось в логе переписки
+    try:
+        await bot.send_message(user_id, t.USER_DATA_DELETED)
+        notified = t.ADM_FORGET_NOTIFIED
+    except (TelegramForbiddenError, TelegramBadRequest):
+        notified = t.ADM_FORGET_NOT_NOTIFIED
+    result = await db.forget_user(user_id) or {"orders": 0, "messages": 0}
+    logger.info("Удалены данные клиента %s по запросу: %s", user_id, result)
+    await message.answer(t.ADM_FORGET_DONE.format(user_id=user_id, notified=notified, **result))
+
+
 # ---------- заявки ----------
 @router.message(Command("orders"))
 @router.callback_query(F.data.startswith("adm:orders:"))

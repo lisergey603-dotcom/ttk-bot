@@ -8,6 +8,7 @@ import aiosqlite
 logger = logging.getLogger(__name__)
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 ORDER_EXTRA_COLUMNS = {"amount": "INTEGER", "deadline": "TEXT", "note": "TEXT"}
+USER_EXTRA_COLUMNS = {"pd_consent_at": "TEXT"}  # когда дал согласие на обработку ПД (UTC)
 
 
 class Database:
@@ -33,6 +34,11 @@ class Database:
             if name not in cols:
                 await self.conn.execute(f"ALTER TABLE orders ADD COLUMN {name} {ddl}")
                 logger.info("БД: добавлена колонка orders.%s", name)
+        cols = {r["name"] for r in await self._fetchall("PRAGMA table_info(users)")}
+        for name, ddl in USER_EXTRA_COLUMNS.items():
+            if name not in cols:
+                await self.conn.execute(f"ALTER TABLE users ADD COLUMN {name} {ddl}")
+                logger.info("БД: добавлена колонка users.%s", name)
 
     async def close(self) -> None:
         if self.conn:
@@ -83,6 +89,19 @@ class Database:
     async def get_user(self, user_id: int) -> dict | None:
         return await self._fetchone("SELECT * FROM users WHERE id=?", (user_id,))
 
+    async def set_pd_consent(self, user_id: int) -> None:
+        """Фиксирует согласие на обработку персональных данных (дата и время UTC)."""
+        await self._exec("UPDATE users SET pd_consent_at=datetime('now') WHERE id=?", (user_id,))
+
+    async def forget_user(self, user_id: int) -> dict[str, int] | None:
+        """Удаляет все данные клиента (по отзыву согласия). None — клиента нет в базе."""
+        if not await self.get_user(user_id):
+            return None
+        orders = await self._exec("DELETE FROM orders WHERE user_id=?", (user_id,))
+        messages = await self._exec("DELETE FROM messages_log WHERE user_id=?", (user_id,))
+        await self._exec("DELETE FROM users WHERE id=?", (user_id,))
+        return {"orders": orders.rowcount, "messages": messages.rowcount}
+
     async def get_active_user_ids(self) -> list[int]:
         rows = await self._fetchall("SELECT id FROM users WHERE is_blocked=0")
         return [r["id"] for r in rows]
@@ -107,14 +126,14 @@ class Database:
 
     async def get_order(self, order_id: int) -> dict | None:
         return await self._fetchone(
-            """SELECT o.*, u.username, u.source FROM orders o
+            """SELECT o.*, u.username, u.source, u.pd_consent_at FROM orders o
                LEFT JOIN users u ON u.id = o.user_id WHERE o.id=?""",
             (order_id,),
         )
 
     async def get_orders(self, limit: int = 10, offset: int = 0) -> list[dict]:
         return await self._fetchall(
-            """SELECT o.*, u.username, u.source FROM orders o
+            """SELECT o.*, u.username, u.source, u.pd_consent_at FROM orders o
                LEFT JOIN users u ON u.id = o.user_id
                ORDER BY o.id DESC LIMIT ? OFFSET ?""",
             (limit, offset),
@@ -128,7 +147,7 @@ class Database:
         return await self._fetchall(
             """SELECT o.id, o.created_at, o.status, o.name, o.venue, o.positions, o.contact,
                       o.comment, o.package, o.amount, o.deadline, o.note, o.user_id, u.username, u.source, u.segment,
-                      u.menu_size, u.ttk_status
+                      u.menu_size, u.ttk_status, u.pd_consent_at
                FROM orders o LEFT JOIN users u ON u.id = o.user_id ORDER BY o.id"""
         )
 

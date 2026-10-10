@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     ttk_status      TEXT,                          -- none / old / update
     reached_price   INTEGER NOT NULL DEFAULT 0,    -- 1 = видел прайс
     is_blocked      INTEGER NOT NULL DEFAULT 0,    -- 1 = заблокировал бота (выясняется при рассылке)
+    pd_consent_at   TEXT,                          -- согласие на обработку ПД (UTC), NULL = не давал
     created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
     last_seen       TEXT    NOT NULL DEFAULT (datetime('now'))
 );
