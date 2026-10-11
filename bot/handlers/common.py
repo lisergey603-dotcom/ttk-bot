@@ -20,7 +20,8 @@ router = Router(name="common")
 
 # Реплай на сообщение бота, в котором есть метка #id123
 REPLY_TO_TAGGED = F.reply_to_message.func(
-    lambda m: m.from_user and m.from_user.is_bot and extract_user_id(m.text or m.caption) is not None
+    lambda m: m is not None and m.from_user is not None and m.from_user.is_bot
+    and extract_user_id(m.text or m.caption) is not None
 )
 
 
@@ -38,6 +39,13 @@ async def manager_reply(message: Message, bot: Bot, db: Database):
     except TelegramForbiddenError:
         await db.mark_blocked(user_id)
         await message.reply(t.MANAGER_REPLY_FAILED)
+
+
+@router.message(IsStaff(), F.chat.type == "private", F.text, ~F.text.startswith("/"),
+                ~F.text.in_({t.REPLY_PRICE, t.REPLY_FAQ, t.REPLY_ORDER, t.REPLY_MANAGER}))
+async def staff_text_without_reply(message: Message):
+    """Менеджер написал текст не реплаем — клиенту он не уйдёт. Подсказываем, текст не теряем."""
+    await message.reply(t.MANAGER_NEED_REPLY)
 
 
 @router.message(F.chat.type == "private", F.text, ~F.text.startswith("/"))
